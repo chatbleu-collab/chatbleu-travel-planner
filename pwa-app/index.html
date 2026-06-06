@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <!-- 스마트폰 화면에 맞춤 -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0b0e17" />
+  <title>AI 여행 일정 플래너</title>
+  <link rel="manifest" href="manifest.json" />
+  <link rel="icon" href="icons/icon-192.png" />
+  <link rel="apple-touch-icon" href="icons/icon-192.png" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <link rel="stylesheet" href="app.css" />
+  <!-- HTTPS 환경(GitHub Pages/Vercel/Netlify)에 배포하면 모바일에서 홈 화면 추가 프롬프트가 표시됩니다. iOS/Android 실제 기기에서 테스트하세요. -->
+</head>
+<body>
+  <main class="frame">
+
+    <!-- 헤더 -->
+    <header class="hdr">
+      <h1>🏔️ AI 여행 일정 플래너</h1>
+      <p class="sub">출발지·목적지·일수·이동수단을 입력하면 날짜별 타임라인 일정을 만들어 드려요</p>
+      <!-- 범례 -->
+      <div class="legend">
+        <span>📍 출발/도착</span>
+        <span>🍴 맛있는 음식</span>
+        <span>📷 포토 스팟</span>
+        <span>🛏️ 편안한 숙박</span>
+      </div>
+    </header>
+
+    <!-- 홈 화면 추가 버튼 (조건 충족 시 표시) -->
+    <button id="installBtn" class="install" hidden>＋ 홈 화면에 추가</button>
+
+    <!-- 입력 섹션 -->
+    <section class="card form">
+      <div class="grid2">
+        <label>출발지
+          <input id="start" type="text" placeholder="예: 서울역" />
+        </label>
+        <label>목적지
+          <input id="destination" type="text" placeholder="예: 강릉 해변" />
+        </label>
+      </div>
+      <div class="grid2">
+        <label>여행일수 (n/n)
+          <input id="duration" type="text" inputmode="numeric" placeholder="예: 2/3" />
+        </label>
+        <label>이동방법
+          <select id="transport">
+            <option value="car">🚗 차량 이동</option>
+            <option value="public">🚌 대중교통</option>
+          </select>
+        </label>
+      </div>
+      <button id="generateBtn" class="primary">맞춤형 일정 생성하기</button>
+    </section>
+
+    <!-- 결과 출력 섹션 (JS가 채움) -->
+    <section id="result"></section>
+
+  </main>
+
+  <!-- 일정 추가/수정 모달 -->
+  <div id="modal" class="modal" hidden>
+    <div class="modal-box">
+      <h3 id="modalTitle">일정 수정</h3>
+      <label>시간
+        <input id="editTime" type="text" inputmode="numeric" placeholder="예: 13:00" />
+      </label>
+      <label>장소 이름
+        <input id="editLocation" type="text" placeholder="예: 강릉 중앙시장" />
+      </label>
+      <label>내용
+        <input id="editActivity" type="text" placeholder="예: 점심 식사" />
+      </label>
+      <div class="grid2">
+        <label>유형
+          <select id="editType">
+            <option value="이동">🚗 이동</option>
+            <option value="식사">🍴 식사</option>
+            <option value="관광">📷 관광</option>
+            <option value="휴식">☕ 휴식</option>
+            <option value="쇼핑">🛍️ 쇼핑</option>
+            <option value="숙박">🛏️ 숙박</option>
+          </select>
+        </label>
+        <label>소요시간 (선택)
+          <input id="editNote" type="text" placeholder="예: 체류 1시간" />
+        </label>
+      </div>
+      <div class="modal-btns">
+        <button id="modalCancel" class="ghost">취소</button>
+        <button id="modalSave" class="primary">저장</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
