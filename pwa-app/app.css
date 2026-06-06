@@ -73,9 +73,16 @@ section{margin-top:14px;}
 @keyframes spin{to{transform:rotate(360deg);}}
 
 /* 결과 헤더 */
-.result-head{display:flex; align-items:center; justify-content:space-between; gap:10px; margin:20px 2px 4px;}
+.result-head{display:flex; align-items:center; justify-content:space-between; gap:10px; margin:20px 2px 4px; flex-wrap:wrap;}
 .result-title{font-size:1.15rem; font-weight:800;}
 .result-title small{color:var(--sub); font-weight:600; font-size:.8rem;}
+.head-btns{display:flex; gap:8px; flex:0 0 auto;}
+.share-btn{
+  padding:7px 13px; border:0; border-radius:10px;
+  background:var(--gold); color:#1a1300; font-size:.8rem; font-weight:800; cursor:pointer;
+}
+.share-btn:active{background:var(--gold-d);}
+.share-btn:disabled{opacity:.6;}
 .reset-btn{
   flex:0 0 auto; padding:7px 13px; border:1.5px solid var(--line); border-radius:10px;
   background:transparent; color:var(--sub); font-size:.8rem; font-weight:700; cursor:pointer;

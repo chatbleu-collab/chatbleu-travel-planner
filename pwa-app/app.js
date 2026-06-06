@@ -200,7 +200,10 @@ function renderItinerary() {
   let html =
     '<div class="result-head">' +
       '<h2 class="result-title">📅 생성된 여행 일정 <small>(' + esc(transportLabel) + ')</small></h2>' +
-      '<button class="reset-btn" data-clear="1">초기화</button>' +
+      '<div class="head-btns">' +
+        '<button class="share-btn" data-share="1">📤 이미지로 공유</button>' +
+        '<button class="reset-btn" data-clear="1">초기화</button>' +
+      '</div>' +
     '</div>';
 
   dayKeys.forEach((day) => {
@@ -428,6 +431,251 @@ function deleteStop(id) {
 }
 
 // =========================================================
+// 4.5) 일정표 PNG 이미지로 공유 (외부 라이브러리 없이 Canvas로 그림)
+// =========================================================
+const KR = '-apple-system,"Noto Sans KR","Malgun Gothic",sans-serif';
+
+function roundRectPath(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+// 한 줄 말줄임
+function truncate(ctx, text, maxW, font) {
+  ctx.font = font;
+  let t = String(text);
+  if (ctx.measureText(t).width <= maxW) return t;
+  while (t.length > 1 && ctx.measureText(t + "…").width > maxW) t = t.slice(0, -1);
+  return t + "…";
+}
+
+// 글자 단위 줄바꿈(최대 maxLines줄, 넘치면 마지막 줄 말줄임)
+function wrapText(ctx, text, maxW, font, maxLines) {
+  ctx.font = font;
+  const chars = [...String(text)];
+  const lines = [];
+  let cur = "";
+  for (const ch of chars) {
+    if (ctx.measureText(cur + ch).width > maxW && cur) { lines.push(cur); cur = ch; }
+    else cur += ch;
+  }
+  if (cur) lines.push(cur);
+  if (lines.length > maxLines) {
+    const kept = lines.slice(0, maxLines);
+    kept[maxLines - 1] = truncate(ctx, kept[maxLines - 1] + lines.slice(maxLines).join(""), maxW, font);
+    return kept;
+  }
+  return lines;
+}
+
+function dotColor(type) {
+  if (type === "식사") return "#fb923c";
+  if (type === "숙박") return "#a78bfa";
+  return "#f5c518";
+}
+
+function drawTypeBadge(ctx, type, rightX, centerY) {
+  ctx.font = "20px " + KR;
+  const tw = ctx.measureText(type).width;
+  const bw = tw + 22, bh = 30, bx = rightX - bw, by = centerY - bh / 2;
+  roundRectPath(ctx, bx, by, bw, bh, 8);
+  ctx.strokeStyle = "#caa30f"; ctx.lineWidth = 1.5; ctx.stroke();
+  ctx.fillStyle = "#f5c518"; ctx.textAlign = "left"; ctx.textBaseline = "middle";
+  ctx.fillText(type, bx + 11, centerY + 1);
+  ctx.textBaseline = "top";
+}
+
+// 포스터를 그리고 전체 높이를 반환
+function renderPoster(ctx, W) {
+  const pad = 40;
+  const cw = W - pad * 2;
+  const timeTextRight = pad + 120;
+  const timeX = pad + 155;
+  const contentX = pad + 195;
+  const rightX = W - pad - 30;
+  const actW = rightX - 110 - contentX;
+  const locW = rightX - contentX;
+  const bandColors = { 1: "#60a5fa", 2: "#34d399", 3: "#fb923c", 4: "#c084fc", 5: "#f87171" };
+  const transportLabel = state.transport === "public" ? "🚌 대중교통" : "🚗 차량 이동";
+  const days = state.itinerary.reduce((m, x) => Math.max(m, x.day), 1);
+  const route = (state.start || "출발지") + " → " + (state.destination || "목적지");
+
+  // 배경
+  ctx.fillStyle = "#0b0e17";
+  ctx.fillRect(0, 0, W, ctx.canvas.height);
+
+  let y = pad;
+
+  // 헤더
+  const headH = 180;
+  const g = ctx.createLinearGradient(pad, y, W - pad, y + headH);
+  g.addColorStop(0, "#1f2937"); g.addColorStop(1, "#0f172a");
+  roundRectPath(ctx, pad, y, cw, headH, 24); ctx.fillStyle = g; ctx.fill();
+  ctx.strokeStyle = "#2a3346"; ctx.lineWidth = 2; ctx.stroke();
+  ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
+  ctx.fillStyle = "#f5c518"; ctx.font = "bold 44px " + KR;
+  ctx.fillText("🏔️ 여행 일정표", pad + 32, y + 64);
+  ctx.fillStyle = "#e9eef6"; ctx.font = "bold 32px " + KR;
+  ctx.fillText(truncate(ctx, route, cw - 64, "bold 32px " + KR), pad + 32, y + 112);
+  ctx.fillStyle = "#93a0b4"; ctx.font = "24px " + KR;
+  ctx.fillText("총 " + state.itinerary.length + "개 일정 · " + days + "일 · " + transportLabel, pad + 32, y + 152);
+  y += headH + 26;
+
+  // 날짜별 그룹
+  const byDay = {};
+  state.itinerary.forEach((it) => (byDay[it.day] = byDay[it.day] || []).push(it));
+  const dayKeys = Object.keys(byDay).map(Number).sort((a, b) => a - b);
+
+  dayKeys.forEach((day) => {
+    const stops = byDay[day];
+    ctx.textBaseline = "top";
+    const blocks = stops.map((s) => {
+      const lines = wrapText(ctx, s.activity, actW, "bold 30px " + KR, 2);
+      const h = 16 + lines.length * 40 + 36 + (s.note ? 32 : 0) + 14;
+      return { s, lines, h };
+    });
+    const panelH = 70 + blocks.reduce((a, b) => a + b.h, 0) + 16;
+
+    // 패널
+    roundRectPath(ctx, pad, y, cw, panelH, 20); ctx.fillStyle = "#141925"; ctx.fill();
+    ctx.strokeStyle = "#2a3346"; ctx.lineWidth = 2; ctx.stroke();
+    // 좌측 컬러 밴드
+    ctx.fillStyle = bandColors[((day - 1) % 5) + 1];
+    roundRectPath(ctx, pad, y + 6, 8, panelH - 12, 4); ctx.fill();
+
+    // 날짜 배지 + 메타
+    const badgeText = day + "일차";
+    ctx.font = "bold 24px " + KR;
+    const tw = ctx.measureText(badgeText).width;
+    ctx.fillStyle = "#f5c518";
+    roundRectPath(ctx, pad + 30, y + 18, tw + 36, 40, 20); ctx.fill();
+    ctx.fillStyle = "#1a1300"; ctx.textBaseline = "middle";
+    ctx.fillText(badgeText, pad + 48, y + 39);
+    ctx.fillStyle = "#93a0b4"; ctx.font = "22px " + KR;
+    ctx.fillText(stops.length + "개 일정 · " + transportLabel, pad + 30 + tw + 36 + 16, y + 39);
+    ctx.textBaseline = "top";
+
+    // 타임라인 세로선
+    let yy = y + 70;
+    const firstCenter = yy + 16 + 15;
+    let lastCenter = firstCenter;
+    blocks.forEach((b) => { lastCenter = yy + 16 + 15; yy += b.h; });
+    ctx.strokeStyle = "#3a3f50"; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(timeX, firstCenter); ctx.lineTo(timeX, lastCenter); ctx.stroke();
+
+    // 각 일정
+    yy = y + 70;
+    blocks.forEach((b) => {
+      const s = b.s, top = yy, centerY = top + 16 + 15;
+      let cy = top + 16;
+      ctx.textAlign = "left"; ctx.textBaseline = "top";
+      ctx.fillStyle = "#e9eef6"; ctx.font = "bold 30px " + KR;
+      const icon = typeMeta(s.type).icon;
+      b.lines.forEach((ln, idx) => { ctx.fillText((idx === 0 ? icon + " " : "") + ln, contentX, cy); cy += 40; });
+      ctx.fillStyle = "#fb923c"; ctx.font = "26px " + KR;
+      ctx.fillText("📍 " + truncate(ctx, s.location, locW - 40, "26px " + KR), contentX, cy); cy += 36;
+      if (s.note) { ctx.fillStyle = "#93a0b4"; ctx.font = "24px " + KR; ctx.fillText("⏱ " + s.note, contentX, cy); cy += 32; }
+      // 시간 + 점
+      ctx.textAlign = "right"; ctx.textBaseline = "middle";
+      ctx.fillStyle = "#f5c518"; ctx.font = "bold 26px " + KR;
+      ctx.fillText(s.time, timeTextRight, centerY);
+      ctx.beginPath(); ctx.arc(timeX, centerY, 9, 0, Math.PI * 2); ctx.fillStyle = dotColor(s.type); ctx.fill();
+      // 유형 배지
+      drawTypeBadge(ctx, s.type, rightX, centerY);
+      ctx.textAlign = "left"; ctx.textBaseline = "top";
+      yy += b.h;
+    });
+
+    y += panelH + 24;
+  });
+
+  // 요약 박스
+  const sumH = 220;
+  roundRectPath(ctx, pad, y, cw, sumH, 20); ctx.fillStyle = "#0f1726"; ctx.fill();
+  ctx.strokeStyle = "#caa30f"; ctx.lineWidth = 2; ctx.stroke();
+  const sItems = [
+    ["🗓️", "여행 일정", route],
+    ["📋", "총 일정 수", state.itinerary.length + "개 (" + days + "일)"],
+    ["🚗", "이동 수단", transportLabel],
+    ["🛏️", "숙박 장소", (state.destination || "목적지") + " 숙소"]
+  ];
+  const colW = cw / 2;
+  sItems.forEach((it, i) => {
+    const cx = pad + 30 + (i % 2) * colW;
+    const cyy = y + 28 + Math.floor(i / 2) * 96;
+    ctx.textAlign = "left"; ctx.textBaseline = "top";
+    ctx.font = "28px " + KR; ctx.fillStyle = "#e9eef6"; ctx.fillText(it[0], cx, cyy);
+    ctx.font = "bold 22px " + KR; ctx.fillStyle = "#f5c518"; ctx.fillText(it[1], cx + 46, cyy);
+    ctx.font = "bold 26px " + KR; ctx.fillStyle = "#e9eef6";
+    ctx.fillText(truncate(ctx, it[2], colW - 96, "bold 26px " + KR), cx + 46, cyy + 32);
+  });
+  y += sumH + 22;
+
+  // TIP + 워터마크
+  ctx.textAlign = "center"; ctx.textBaseline = "top";
+  ctx.fillStyle = "#93a0b4"; ctx.font = "22px " + KR;
+  ctx.fillText("💡 교통 상황에 따라 시간이 변동될 수 있어요. 여유 있게 출발하세요!", W / 2, y); y += 40;
+  ctx.fillStyle = "#5b6678"; ctx.font = "20px " + KR;
+  ctx.fillText("· 여행플래너로 제작 ·", W / 2, y); y += 28;
+  ctx.textAlign = "left";
+
+  return y + pad;
+}
+
+function buildShareCanvas() {
+  const W = 1080;
+  const dayCount = new Set(state.itinerary.map((s) => s.day)).size;
+  const estH = 120 + 206 + dayCount * 130 + state.itinerary.length * 190 + 260 + 120;
+  const tmp = document.createElement("canvas");
+  tmp.width = W; tmp.height = estH;
+  const H = Math.ceil(renderPoster(tmp.getContext("2d"), W));
+  const c = document.createElement("canvas");
+  c.width = W; c.height = H;
+  renderPoster(c.getContext("2d"), W);
+  return c;
+}
+
+async function shareItineraryImage() {
+  if (state.itinerary.length === 0) { alert("먼저 일정을 생성해 주세요."); return; }
+  const btn = document.querySelector("[data-share]");
+  if (btn) { btn.disabled = true; btn.textContent = "이미지 만드는 중..."; }
+  try {
+    const canvas = buildShareCanvas();
+    const blob = await new Promise((res) => canvas.toBlob(res, "image/png"));
+    if (!blob) { alert("이미지 생성에 실패했어요."); return; }
+    const fileName = "여행일정_" + (state.destination || "여행") + ".png";
+    const file = new File([blob], fileName, { type: "image/png" });
+
+    // 1) 파일 공유 지원(모바일): 공유 시트로 카톡 등에 바로 전송
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      try {
+        await navigator.share({ files: [file], title: "여행 일정표", text: "여행플래너로 만든 일정표예요!" });
+        return;
+      } catch (e) {
+        if (e && e.name === "AbortError") return; // 사용자가 취소
+      }
+    }
+    // 2) 미지원(주로 데스크톱): PNG 파일로 저장
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = fileName; a.target = "_self";
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+    alert("일정표 이미지를 저장했어요. 친구에게 공유해 보세요!");
+  } catch (err) {
+    console.log("공유 실패:", err);
+    alert("이미지를 만드는 중 문제가 발생했어요.");
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = "📤 이미지로 공유"; }
+  }
+}
+
+// =========================================================
 // 5) 이벤트 연결
 // =========================================================
 $("generateBtn").addEventListener("click", generateItinerary);
@@ -453,6 +701,9 @@ resultEl.addEventListener("click", (e) => {
 
   const addBtn = e.target.closest("[data-add]");
   if (addBtn) { openModal("add", null, Number(addBtn.dataset.add)); return; }
+
+  const shareBtn = e.target.closest("[data-share]");
+  if (shareBtn) { shareItineraryImage(); return; }
 
   const clearBtn = e.target.closest("[data-clear]");
   if (clearBtn) { clearState(); }
