@@ -10,6 +10,7 @@
   <link rel="icon" href="icons/icon-192.png" />
   <link rel="apple-touch-icon" href="icons/icon-192.png" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="여행플래너" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <link rel="stylesheet" href="app.css" />
   <!-- HTTPS 환경(GitHub Pages/Vercel/Netlify)에 배포하면 모바일에서 홈 화면 추가 프롬프트가 표시됩니다. iOS/Android 실제 기기에서 테스트하세요. -->
@@ -30,8 +31,8 @@
       </div>
     </header>
 
-    <!-- 홈 화면 추가 버튼 (조건 충족 시 표시) -->
-    <button id="installBtn" class="install" hidden>＋ 홈 화면에 추가</button>
+    <!-- 홈 화면 추가 버튼 (항상 표시 · 클릭 시 설치 또는 안내) -->
+    <button id="installBtn" class="install">＋ 홈 화면에 추가</button>
 
     <!-- 입력 섹션 -->
     <section class="card form">
@@ -45,7 +46,7 @@
       </div>
       <div class="grid2">
         <label>여행일수 (n/n)
-          <input id="duration" type="text" inputmode="numeric" placeholder="예: 2/3" />
+          <input id="duration" type="text" placeholder="예: 2/3" />
         </label>
         <label>이동방법
           <select id="transport">
@@ -67,7 +68,7 @@
     <div class="modal-box">
       <h3 id="modalTitle">일정 수정</h3>
       <label>시간
-        <input id="editTime" type="text" inputmode="numeric" placeholder="예: 13:00" />
+        <input id="editTime" type="text" placeholder="예: 13:00" />
       </label>
       <label>장소 이름
         <input id="editLocation" type="text" placeholder="예: 강릉 중앙시장" />

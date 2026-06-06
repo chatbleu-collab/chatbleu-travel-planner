@@ -1,5 +1,5 @@
 {
-  "name": "AI 여행 일정 플래너",
+  "name": "여행플래너",
   "short_name": "여행플래너",
   "description": "출발지·목적지·일수·이동수단을 입력하면 날짜별 카드 일정을 만들어 주는 PWA",
   "start_url": "./index.html",

@@ -1,7 +1,7 @@
 // 서비스워커: 오프라인 캐시 지원
 // 캐시 버전과 파일 목록은 아래 상수에서 쉽게 수정하세요.
 // (파일을 수정한 뒤에는 CACHE_NAME 버전을 v2, v3 ... 으로 올려야 새 내용이 반영됩니다.)
-const CACHE_NAME = "travel-planner-v5";
+const CACHE_NAME = "travel-planner-v6";
 const FILES_TO_CACHE = [
   "./",
   "./index.html",

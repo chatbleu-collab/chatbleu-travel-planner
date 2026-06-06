@@ -39,6 +39,39 @@ function timeToMin(t) {
   return m ? Number(m[1]) * 60 + Number(m[2]) : 9999;
 }
 
+// 분 → "HH:MM" (0~23:59 범위로 보정)
+function minToTime(total) {
+  if (total < 0) total = 0;
+  if (total > 24 * 60 - 1) total = 24 * 60 - 1;
+  const h = Math.floor(total / 60), m = total % 60;
+  return String(h).padStart(2, "0") + ":" + String(m).padStart(2, "0");
+}
+
+// 소요시간 메모("체류 1시간 30분", "20분", "약 2시간")에서 분 추출. 없으면 null
+function parseDurationMin(note) {
+  if (!note) return null;
+  let total = 0, found = false;
+  const h = String(note).match(/(\d+)\s*시간/);
+  if (h) { total += Number(h[1]) * 60; found = true; }
+  const m = String(note).match(/(\d+)\s*분/);
+  if (m) { total += Number(m[1]); found = true; }
+  return found ? total : null;
+}
+
+// 기준 일정부터 같은 날짜의 '다음 일정들' 시작시간을 소요시간 기준으로 자동 재계산
+// 다음 일정 시작 = 직전 일정 시작 + 직전 일정 소요시간(없으면 기본 60분)
+const DEFAULT_DURATION_MIN = 60;
+function cascadeTimes(fromStop) {
+  const dayStops = state.itinerary.filter((x) => x.day === fromStop.day);
+  const startIdx = dayStops.indexOf(fromStop);
+  if (startIdx < 0) return;
+  for (let k = startIdx; k < dayStops.length - 1; k++) {
+    const dur = parseDurationMin(dayStops[k].note);
+    const durMin = dur == null ? DEFAULT_DURATION_MIN : dur;
+    dayStops[k + 1].time = minToTime(timeToMin(dayStops[k].time) + durMin);
+  }
+}
+
 // =========================================================
 // 1) 일정 생성 (지금은 예시 데이터. 실제 AI API 연동 시 buildItinerary 교체)
 // =========================================================
@@ -184,7 +217,13 @@ function renderItinerary() {
       const m = typeMeta(it.type);
       const upDis = i === 0 ? " disabled" : "";
       const downDis = i === stops.length - 1 ? " disabled" : "";
-      const nextDay = (day % maxDay) + 1; // 이동할 다음 날짜
+      // 전일/다음일 날짜 이동 버튼 (해당 날짜가 있을 때만)
+      const prevBtn = day > 1
+        ? '<button class="btn-day" data-dayid="' + it.id + '" data-target="' + (day - 1) + '" title="전날로 이동">📅 ' + (day - 1) + '일차로</button>'
+        : '';
+      const nextBtn = day < maxDay
+        ? '<button class="btn-day" data-dayid="' + it.id + '" data-target="' + (day + 1) + '" title="다음날로 이동">📅 ' + (day + 1) + '일차로</button>'
+        : '';
       html +=
         '<div class="tl-item ' + m.cls + '">' +
           '<div class="tl-time">' + esc(it.time) + '</div>' +
@@ -207,7 +246,7 @@ function renderItinerary() {
               '<button class="btn-move" data-move="up" data-id="' + it.id + '"' + upDis + ' title="위로">▲</button>' +
               '<button class="btn-move" data-move="down" data-id="' + it.id + '"' + downDis + ' title="아래로">▼</button>' +
               '<button class="btn-edit" data-edit="' + it.id + '" title="수정">✏️ 수정</button>' +
-              (showDayMove ? '<button class="btn-day" data-day="' + it.id + '" title="다른 날짜로 이동">📅 ' + nextDay + '일차로</button>' : '') +
+              (showDayMove ? prevBtn + nextBtn : '') +
               '<button class="btn-del" data-del="' + it.id + '" title="삭제">🗑️ 삭제</button>' +
             '</div>' +
           '</div>' +
@@ -319,7 +358,12 @@ function saveModal() {
   if (state.editingId != null) {
     // 수정
     const it = state.itinerary.find((x) => x.id === state.editingId);
-    if (it) { it.time = time; it.location = loc; it.activity = activity; it.type = type; it.note = note; }
+    if (it) {
+      const timeOrNoteChanged = it.time !== time || it.note !== note;
+      it.time = time; it.location = loc; it.activity = activity; it.type = type; it.note = note;
+      // 시간 또는 소요시간이 바뀌면 같은 날 다음 일정들의 시간을 자동 조정
+      if (timeOrNoteChanged) cascadeTimes(it);
+    }
   } else {
     // 추가 — 같은 날짜 안에서 시간 순서에 맞게 삽입
     addStopSorted({ id: nextId(), day: state.addingDay, time, activity, location: loc, type, note });
@@ -359,16 +403,16 @@ function moveStop(id, dir) {
   renderItinerary();
 }
 
-// 일정을 다음 날짜로 이동 (마지막 날이면 1일차로 순환). 새 날짜의 시간 순서에 맞게 재삽입
-function moveToDay(id) {
+// 일정을 지정한 날짜로 이동 (전일/다음일). 새 날짜의 시간 순서에 맞게 재삽입
+function moveStopToDay(id, targetDay) {
   const arr = state.itinerary;
   const idx = arr.findIndex((x) => x.id === id);
   if (idx < 0) return;
   const maxDay = arr.reduce((m, x) => Math.max(m, x.day), 1);
-  if (maxDay < 2) return; // 하루 일정이면 이동할 다른 날짜가 없음
+  if (targetDay < 1 || targetDay > maxDay) return; // 범위 밖이면 무시
   const it = arr[idx];
   arr.splice(idx, 1);
-  it.day = (it.day % maxDay) + 1;
+  it.day = targetDay;
   addStopSorted(it);
   saveState();
   renderItinerary();
@@ -401,8 +445,8 @@ resultEl.addEventListener("click", (e) => {
   const moveBtn = e.target.closest("[data-move]");
   if (moveBtn) { moveStop(Number(moveBtn.dataset.id), moveBtn.dataset.move); return; }
 
-  const dayBtn = e.target.closest("[data-day]");
-  if (dayBtn) { moveToDay(Number(dayBtn.dataset.day)); return; }
+  const dayBtn = e.target.closest("[data-dayid]");
+  if (dayBtn) { moveStopToDay(Number(dayBtn.dataset.dayid), Number(dayBtn.dataset.target)); return; }
 
   const delBtn = e.target.closest("[data-del]");
   if (delBtn) { deleteStop(Number(delBtn.dataset.del)); return; }
@@ -473,20 +517,35 @@ if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
 
 let deferredPrompt = null;
 const installBtn = $("installBtn");
+const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent) ||
+  (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1); // iPadOS 포함
+const isStandalone = window.matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+
+// 이미 홈화면에서 실행 중이면 설치 버튼 숨김
+if (installBtn && isStandalone) installBtn.hidden = true;
 
 window.addEventListener("beforeinstallprompt", (e) => {
-  e.preventDefault();
+  e.preventDefault();   // 기본 배너 보류 → 우리 버튼으로 직접 처리
   deferredPrompt = e;
-  if (installBtn) installBtn.hidden = false;
 });
 
 if (installBtn) {
   installBtn.addEventListener("click", async () => {
-    if (!deferredPrompt) return;
-    deferredPrompt.prompt();
-    await deferredPrompt.userChoice;
-    deferredPrompt = null;
-    installBtn.hidden = true;
+    // 1) 설치 프롬프트 지원(안드로이드 크롬 / 데스크톱 크롬·엣지): 바로 설치
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      const choice = await deferredPrompt.userChoice;
+      deferredPrompt = null;
+      if (choice && choice.outcome === "accepted") installBtn.hidden = true;
+      return;
+    }
+    // 2) 아이폰/아이패드 사파리: 프로그램 설치 불가 → 수동 안내
+    if (isIOS) {
+      alert("📱 아이폰 홈 화면에 추가하기\n\n1) 사파리 아래쪽 '공유' 버튼(□에 ↑ 모양)을 누르세요\n2) 메뉴를 내려 '홈 화면에 추가'를 누르세요\n3) 오른쪽 위 '추가'를 누르면 완료!");
+      return;
+    }
+    // 3) 그 외 브라우저 안내
+    alert("📱 홈 화면에 추가하기\n\n브라우저 메뉴(⋮ 또는 공유)에서\n'홈 화면에 추가' 또는 '앱 설치'를 선택하세요.\n(데스크톱은 주소창 오른쪽의 설치 아이콘)");
   });
 }
 
